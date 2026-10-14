@@ -1,0 +1,308 @@
+<title>Reading Stack</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600&family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one narrow reading column, app-style bottom tab bar for phone; summaries set in a reading serif, UI in a sans. */
+:root{
+  --bg:#f4f6f8; --surface:#ffffff; --sunk:#e9edf1; --fg:#17202a; --muted:#5d6b78; --line:#d6dde4;
+  --accent:#1f5f8b; --accent-soft:#dbe8f2; --good:#2e7d4f; --warn:#a4651a; --bad:#b03a3a;
+  --ui:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --read:"Literata",Georgia,"Times New Roman",serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#101418; --surface:#181e24; --sunk:#202830; --fg:#e6ebf0; --muted:#97a5b3; --line:#2c3640;
+  --accent:#7cb4dc; --accent-soft:#1c3346; --good:#6cc391; --warn:#e0a95e; --bad:#ec8a8a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101418; --surface:#181e24; --sunk:#202830; --fg:#e6ebf0; --muted:#97a5b3; --line:#2c3640;
+  --accent:#7cb4dc; --accent-soft:#1c3346; --good:#6cc391; --warn:#e0a95e; --bad:#ec8a8a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--ui);font-size:15px;line-height:1.45}
+.wrap{max-width:720px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 96px}
+h1,h2,h3{text-wrap:balance;margin:0}
+h1{font-size:1.5rem;font-weight:700;letter-spacing:-.01em}
+h2{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+a{color:var(--accent)}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:16px}
+.count{color:var(--muted);font-size:.85rem;font-variant-numeric:tabular-nums}
+.banner{background:var(--sunk);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:.9rem}
+.banner.err{border-color:var(--bad)}
+section{display:flex;flex-direction:column;gap:10px;margin-bottom:28px}
+.list{display:flex;flex-direction:column;gap:8px}
+.item{display:flex;flex-direction:column;gap:4px;text-align:left;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.item:hover{border-color:var(--accent)}
+.item .t{font-weight:600;font-size:1rem;line-height:1.3}
+.item .tl{color:var(--muted);font-size:.88rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.meta{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;color:var(--muted);font-size:.8rem}
+.topic{display:inline-flex;align-items:center;gap:6px;font-weight:600;color:var(--fg)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}
+.unread{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 10px;font-size:.8rem;white-space:nowrap}
+.chip.on{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.empty{border:1px dashed var(--line);border-radius:10px;padding:20px;color:var(--muted);text-align:center}
+.btn{background:var(--accent);color:var(--bg);border:0;border-radius:8px;padding:10px 16px;font-weight:600}
+.btn:disabled{opacity:.55;cursor:default}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
+.btn.danger{background:transparent;color:var(--bad);border:1px solid var(--line)}
+label{display:flex;flex-direction:column;gap:4px;font-size:.85rem;font-weight:600}
+label small{font-weight:400;color:var(--muted)}
+input[type=text],input[type=url],input[type=search],textarea,select{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:100%;font-weight:400}
+textarea{min-height:160px;resize:vertical;line-height:1.4}
+.form{display:flex;flex-direction:column;gap:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.status{font-size:.9rem;color:var(--muted)}
+.status.err{color:var(--bad)}
+/* article view */
+.back{background:none;border:0;color:var(--accent);padding:0;font-weight:600;margin-bottom:12px}
+.art h1{font-family:var(--read);font-weight:600;font-size:1.6rem;line-height:1.2;margin-bottom:8px}
+.tldr{font-family:var(--read);font-size:1.08rem;line-height:1.55;background:var(--accent-soft);border-radius:10px;padding:14px 16px}
+.art ul{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:6px;font-family:var(--read);line-height:1.5}
+.outline{display:flex;flex-direction:column;border-left:2px solid var(--line);margin-left:4px}
+.outline div{padding:4px 0 10px 14px;position:relative}
+.outline div::before{content:"";position:absolute;left:-6px;top:10px;width:10px;height:10px;border-radius:50%;background:var(--surface);border:2px solid var(--accent)}
+.outline b{display:block;font-size:.9rem}
+.outline span{color:var(--muted);font-size:.9rem}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.stat .v{font-size:1.35rem;font-weight:700;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.stat .l{font-size:.85rem}
+.stat .c{font-size:.75rem;color:var(--muted)}
+.chart{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.bar{display:flex;flex-direction:column;gap:3px}
+.bar .bl{display:flex;justify-content:space-between;gap:8px;font-size:.82rem}
+.bar .bl span:last-child{font-variant-numeric:tabular-nums;font-weight:600}
+.track{height:10px;background:var(--sunk);border-radius:5px;overflow:hidden}
+.fill{height:100%;background:var(--accent);border-radius:5px}
+.fill.neg{background:var(--warn)}
+blockquote{margin:0;padding:4px 0 4px 14px;border-left:3px solid var(--accent);font-family:var(--read);font-style:italic}
+.why{font-family:var(--read);line-height:1.55}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:.88rem}
+.facts dt{color:var(--muted)}
+.facts dd{margin:0;overflow-wrap:anywhere;min-width:0}
+.confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:.9rem}
+/* bottom nav */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);display:flex;justify-content:center;gap:4px;padding:6px max(16px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));z-index:5}
+nav.tabs button{flex:1;max-width:160px;background:none;border:0;border-radius:8px;padding:8px;font-weight:600;color:var(--muted);font-size:.85rem}
+nav.tabs button.on{color:var(--accent);background:var(--accent-soft)}
+nav.tabs button.add{color:var(--bg);background:var(--accent)}
+@media (prefers-reduced-motion:no-preference){.item,.chip,.btn{transition:border-color .15s,background .15s}}
+</style>
+
+<div class="wrap" id="app"><div class="top"><h1>Reading Stack</h1></div><div class="empty">Loading your library…</div></div>
+<nav class="tabs" aria-label="Sections">
+  <button id="tab-home" data-v="home">Home</button>
+  <button id="tab-add" data-v="add" class="add">+ Add</button>
+  <button id="tab-library" data-v="library">Library</button>
+</nav>
+
+<script>
+const TOPICS=["AI","Tax Planning","Football","Fantasy Football","Markets & Economy","Retirement","Estate Planning","Insurance","Personal Finance","Practice Management","Leadership & Productivity","Other"];
+const HUES=[205,150,20,35,260,175,300,190,120,230,330,210];
+const topicColor=t=>{const i=Math.max(0,TOPICS.indexOf(t));return `hsl(${HUES[i]} 55% 48%)`};
+let db=null,sample=null,articles=[],loaded=false,dbError="",view="home",currentId=null,confirmDelete=false;
+const filter={q:"",topic:"",status:""};
+const draft={url:"",found:"",text:"",files:[]};
+let busy=false,statusMsg="",statusErr=false;
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtDate=iso=>{try{return new Date(iso).toLocaleString([], {month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"})}catch{return iso}};
+const host=u=>{try{return new URL(u).hostname.replace(/^www\./,"")}catch{return ""}};
+const arr=x=>Array.isArray(x)?x:[];
+
+/* ---------- boot ---------- */
+(async()=>{
+  const use=window.claude&&window.claude.use;
+  if(use){
+    [db,sample]=await Promise.all([window.claude.use("db"),window.claude.use("sample")]);
+  }
+  if(!db){loaded=true;dbError="Your library can't load here. Open this page on claude.ai while signed in.";render();return}
+  db.collection("articles").orderBy("addedAt","desc").onSnapshot(s=>{
+    articles=s.docs.map(d=>({id:d.id,...d.data()}));loaded=true;render();
+  },e=>{loaded=true;dbError="Lost connection to your library. Reload the page to reconnect.";render()});
+})();
+
+document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>go(b.dataset.v));
+function go(v,id){view=v;currentId=id||null;confirmDelete=false;render();window.scrollTo(0,0)}
+
+/* ---------- suggestions ---------- */
+function features(a){return new Set([`t:${a.topic}`,...arr(a.tags).map(x=>"g:"+String(x).toLowerCase()),...arr(a.entities).map(x=>"e:"+String(x).toLowerCase())])}
+function similarity(a,b){const fa=features(a),fb=features(b);let s=0;for(const f of fa)if(fb.has(f))s+=f.startsWith("t:")?2:1;return s}
+function upNext(){
+  const unread=articles.filter(a=>a.status!=="read");
+  const liked=articles.filter(a=>a.status==="read"||a.favorite);
+  const scored=unread.map(a=>{let s=0;for(const l of liked)s+=similarity(a,l)*(l.favorite?2:1);if((a.readMinutes||99)<=6)s+=1;return{a,s}});
+  scored.sort((x,y)=>y.s-x.s||(x.a.readMinutes||99)-(y.a.readMinutes||99));
+  return scored.slice(0,4).map(x=>x.a);
+}
+function moreLike(a){return articles.filter(b=>b.id!==a.id).map(b=>({b,s:similarity(a,b)})).filter(x=>x.s>=2).sort((x,y)=>y.s-x.s).slice(0,4).map(x=>x.b)}
+
+/* ---------- render ---------- */
+function render(){
+  document.querySelectorAll("nav.tabs button").forEach(b=>b.classList.toggle("on",b.dataset.v===view&&view!=="add"));
+  const app=$("#app");
+  const banner=dbError?`<div class="banner err">${esc(dbError)}</div>`:"";
+  if(view==="article")return app.innerHTML=banner+articleView();
+  if(view==="add"){app.innerHTML=banner+addView();bindAdd();return}
+  if(view==="library"){app.innerHTML=banner+libraryView();bindLibrary();return}
+  app.innerHTML=banner+homeView();
+}
+function card(a){
+  return `<button class="item" onclick="go('article','${esc(a.id)}')">
+    <span class="meta"><span class="topic"><span class="dot" style="background:${topicColor(a.topic)}"></span>${esc(a.topic||"Other")}</span>
+    ${a.readMinutes?`<span>${esc(a.readMinutes)} min article</span>`:""}<span>${esc(a.publisher||host(a.url))}</span>
+    ${a.status!=="read"?`<span class="unread" title="Unread"></span>`:""}${a.favorite?"<span>★</span>":""}</span>
+    <span class="t">${esc(a.title||"Untitled")}</span>
+    <span class="tl">${esc(a.tldr||"")}</span></button>`;
+}
+function homeView(){
+  const head=`<div class="top"><h1>Reading Stack</h1><span class="count">${articles.length} saved · ${articles.filter(a=>a.status!=="read").length} unread</span></div>`;
+  if(!loaded)return head+`<div class="empty">Loading your library…</div>`;
+  if(!articles.length)return head+`<div class="empty"><p><b>Your library is empty.</b></p><p>Tap <b>+ Add</b>, paste an article's link and text, and Claude writes a quick-read summary with the key points, numbers and a chart when the article has data.</p><button class="btn" onclick="go('add')">Add your first article</button></div>`;
+  const nx=upNext();
+  return head+
+  (nx.length?`<section><h2>Up next</h2><div class="list">${nx.map(card).join("")}</div></section>`:"")+
+  `<section><h2>Recently added</h2><div class="list">${articles.slice(0,6).map(card).join("")}</div></section>`;
+}
+function matches(a){
+  if(filter.topic&&a.topic!==filter.topic)return false;
+  if(filter.status==="unread"&&a.status==="read")return false;
+  if(filter.status==="read"&&a.status!=="read")return false;
+  if(filter.status==="fav"&&!a.favorite)return false;
+  const q=filter.q.trim().toLowerCase();if(!q)return true;
+  const hay=[a.title,a.author,a.publisher,a.url,a.topic,a.tldr,a.whyItMatters,a.notes,a.foundVia,...arr(a.tags),...arr(a.entities),...arr(a.takeaways)].join(" ").toLowerCase();
+  return q.split(/\s+/).every(w=>hay.includes(w));
+}
+function libraryView(){
+  const counts={};articles.forEach(a=>counts[a.topic]=(counts[a.topic]||0)+1);
+  const res=articles.filter(matches);
+  return `<div class="top"><h1>Library</h1><span class="count">${res.length} of ${articles.length}</span></div>
+  <section><input type="search" id="q" placeholder="Search titles, authors, sites, tags, people, notes…" value="${esc(filter.q)}" aria-label="Search library">
+  <div class="chips"><button class="chip ${!filter.topic?"on":""}" data-topic="">All topics</button>${TOPICS.filter(t=>counts[t]).map(t=>`<button class="chip ${filter.topic===t?"on":""}" data-topic="${esc(t)}">${esc(t)} · ${counts[t]}</button>`).join("")}</div>
+  <div class="chips">${[["","Any status"],["unread","Unread"],["read","Read"],["fav","★ Favorites"]].map(([v,l])=>`<button class="chip ${filter.status===v?"on":""}" data-status="${v}">${l}</button>`).join("")}</div></section>
+  <div class="list" id="results">${res.length?res.map(card).join(""):`<div class="empty">${articles.length?"Nothing matches. Try fewer words or clear a filter.":"No articles yet."}</div>`}</div>`;
+}
+function bindLibrary(){
+  const q=$("#q");q.oninput=()=>{filter.q=q.value;const res=articles.filter(matches);$("#results").innerHTML=res.length?res.map(card).join(""):`<div class="empty">Nothing matches. Try fewer words or clear a filter.</div>`;$(".count").textContent=`${res.length} of ${articles.length}`};
+  document.querySelectorAll("[data-topic]").forEach(b=>b.onclick=()=>{filter.topic=b.dataset.topic;render()});
+  document.querySelectorAll("[data-status]").forEach(b=>b.onclick=()=>{filter.status=b.dataset.status;render()});
+}
+function searchFor(term){filter.q=term;filter.topic="";filter.status="";go("library")}
+
+function articleView(){
+  const a=articles.find(x=>x.id===currentId);
+  if(!a)return `<button class="back" onclick="go('home')">‹ Back</button><div class="empty">This article was removed.</div>`;
+  const max=Math.max(...arr(a.chart?.data).map(d=>Math.abs(Number(d.value)||0)),0)||1;
+  const similar=moreLike(a);
+  return `<button class="back" onclick="history.length;go(filter.q||filter.topic||filter.status?'library':'home')">‹ Back</button>
+  <article class="art">
+  <section>
+    <span class="meta"><span class="topic"><span class="dot" style="background:${topicColor(a.topic)}"></span>${esc(a.topic)}</span>${a.readMinutes?`<span>${esc(a.readMinutes)} min full article</span>`:""}</span>
+    <h1>${esc(a.title)}</h1>
+    <span class="meta">${a.author?`<span>${esc(a.author)}</span>`:""}<span>${esc(a.publisher||host(a.url))}</span>${a.publishedDate?`<span>Published ${esc(a.publishedDate)}</span>`:""}</span>
+    <div class="row"><button class="btn ${a.status==="read"?"ghost":""}" onclick="patch('${a.id}',{status:'${a.status==="read"?"unread":"read"}'})">${a.status==="read"?"Mark unread":"Mark as read"}</button>
+    <button class="btn ghost" onclick="patch('${a.id}',{favorite:${!a.favorite}})">${a.favorite?"★ Favorited":"☆ Favorite"}</button>
+    ${a.url?`<a class="btn ghost" style="text-decoration:none" href="${esc(a.url)}" target="_blank" rel="noopener">Open original ↗</a>`:""}</div>
+  </section>
+  <section><h2>TL;DR</h2><div class="tldr">${esc(a.tldr)}</div></section>
+  ${arr(a.takeaways).length?`<section><h2>Key takeaways</h2><ul>${a.takeaways.map(t=>`<li>${esc(t)}</li>`).join("")}</ul></section>`:""}
+  ${arr(a.stats).length?`<section><h2>By the numbers</h2><div class="stats">${a.stats.map(s=>`<div class="stat"><span class="v">${esc(s.value)}</span><span class="l">${esc(s.label)}</span>${s.context?`<span class="c">${esc(s.context)}</span>`:""}</div>`).join("")}</div></section>`:""}
+  ${arr(a.chart?.data).length>=2?`<section><h2>${esc(a.chart.title||"Chart")}</h2><div class="chart">${a.chart.data.map(d=>{const v=Number(d.value)||0;return `<div class="bar"><div class="bl"><span>${esc(d.label)}</span><span>${esc(v.toLocaleString())}${a.chart.unit?" "+esc(a.chart.unit):""}</span></div><div class="track"><div class="fill ${v<0?"neg":""}" style="width:${Math.max(1,Math.abs(v)/max*100)}%"></div></div></div>`}).join("")}<span class="meta">Figures as reported in the article.</span></div></section>`:""}
+  ${arr(a.outline).length?`<section><h2>How the article is structured</h2><div class="outline">${a.outline.map(o=>`<div><b>${esc(o.heading)}</b><span>${esc(o.point)}</span></div>`).join("")}</div></section>`:""}
+  ${arr(a.quotes).length?`<section><h2>Notable quotes</h2>${a.quotes.map(q=>`<blockquote>${esc(q)}</blockquote>`).join("")}</section>`:""}
+  ${a.whyItMatters?`<section><h2>Why it matters</h2><p class="why" style="margin:0">${esc(a.whyItMatters)}</p></section>`:""}
+  <section><h2>Tags & mentions</h2><div class="chips">${[...arr(a.tags),...arr(a.entities)].map(t=>`<button class="chip" onclick="searchFor(${esc(JSON.stringify(String(t)))})">${esc(t)}</button>`).join("")||'<span class="meta">None</span>'}</div></section>
+  <section><h2>Your notes</h2>
+    <textarea id="notes-${a.id}" style="min-height:90px" placeholder="Thoughts, who to share it with, follow-ups…" onchange="patch('${a.id}',{notes:this.value})">${esc(a.notes||"")}</textarea>
+    <dl class="facts"><dt>Added</dt><dd>${esc(fmtDate(a.addedAt))}</dd><dt>Found via</dt><dd>${esc(a.foundVia||"—")}</dd><dt>Source</dt><dd>${a.url?`<a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.url)}</a>`:"—"}</dd></dl>
+  </section>
+  ${similar.length?`<section><h2>More like this</h2><div class="list">${similar.map(card).join("")}</div></section>`:""}
+  <section>${confirmDelete?`<div class="confirm">Delete this summary for good? <button class="btn danger" onclick="remove('${a.id}')">Delete</button><button class="btn ghost" onclick="confirmDelete=false;render()">Keep</button></div>`:`<div><button class="btn danger" onclick="confirmDelete=true;render()">Delete summary</button></div>`}</section>
+  </article>`;
+}
+async function patch(id,data){try{await db.doc("articles/"+id).update(data)}catch(e){dbError="Couldn't save that change. Try again.";render()}}
+async function remove(id){try{await db.doc("articles/"+id).delete();await db.doc("texts/"+id).delete()}catch{}go("home")}
+
+/* ---------- add ---------- */
+function addView(){
+  const dup=draft.url&&articles.find(a=>a.url===draft.url.trim());
+  return `<div class="top"><h1>Add an article</h1></div>
+  ${sample?"":`<div class="banner">Summaries need Claude. Open this page on claude.ai while signed in.</div>`}
+  <form class="form" id="addform">
+    <label>Article link<input type="url" id="f-url" inputmode="url" placeholder="https://…" value="${esc(draft.url)}"></label>
+    ${dup?`<div class="banner">You saved this link on ${esc(fmtDate(dup.addedAt))}. <a href="#" onclick="go('article','${dup.id}');return false">Open it</a></div>`:""}
+    <label>Article text <small>In Chrome, long-press the article text, tap Select All, then Copy and paste here.</small><textarea id="f-text" placeholder="Paste the article text…">${esc(draft.text)}</textarea></label>
+    <label>Or screenshots <small>Optional. Add screenshots of the article if copying text doesn't work.</small><input type="file" id="f-img" accept="image/*" multiple></label>
+    <label>How you found it <small>Optional, for example "client email" or "LinkedIn post from a CPA"</small><input type="text" id="f-found" value="${esc(draft.found)}"></label>
+    <div class="row"><button class="btn" id="f-go" type="submit" ${busy||!sample?"disabled":""}>${busy?"Summarizing…":"Summarize & save"}</button>
+    <span class="status ${statusErr?"err":""}" id="f-status">${esc(statusMsg)}</span></div>
+  </form>`;
+}
+function bindAdd(){
+  const u=$("#f-url"),t=$("#f-text"),f=$("#f-found"),img=$("#f-img");
+  u.oninput=()=>draft.url=u.value; u.onchange=()=>render();
+  t.oninput=()=>draft.text=t.value; f.oninput=()=>draft.found=f.value;
+  img.onchange=()=>draft.files=[...img.files];
+  $("#addform").onsubmit=e=>{e.preventDefault();summarize()};
+}
+function setStatus(m,err){statusMsg=m;statusErr=!!err;const s=$("#f-status");if(s){s.textContent=m;s.classList.toggle("err",!!err)}}
+
+const PROMPT=`You summarize articles for a busy reader who skims on a phone between meetings. Read the article and reply with ONLY one JSON object in this shape:
+{"title":string,"author":string or null,"publisher":string or null,"publishedDate":"YYYY-MM-DD" or null,
+"topic":one of ${JSON.stringify(TOPICS)},
+"tags":[3-8 short lowercase keyword tags],
+"entities":[up to 10 people, companies, organizations, laws, programs or tickers named in the article],
+"readMinutes":integer estimate to read the full article,
+"tldr":"2-3 plain sentences",
+"takeaways":[5-7 specific one-sentence bullets],
+"outline":[{"heading":"section or step of the argument","point":"one-line gist"}] 3-8 items following the article's own order,
+"stats":[{"value":"e.g. $1.2T or 38%","label":"what it measures","context":"source or timeframe if given"}] 0-6 key figures,
+"chart":null or {"title":string,"unit":string,"data":[{"label":string,"value":number}]},
+"quotes":[0-3 short notable quotes, verbatim],
+"whyItMatters":"2-3 sentences on implications for the reader"}
+Rules:
+- Use only facts and numbers that appear in the article. Never estimate, round differently or invent figures.
+- Give a chart only when the article states 3 or more directly comparable numbers in the same unit; otherwise null.
+- Unknown fields are null or empty lists. Plain language, no hype.
+- If screenshots are attached they are the article's pages in order.`;
+
+async function summarize(){
+  if(busy)return;
+  const url=draft.url.trim(),text=draft.text.trim(),files=draft.files;
+  if(!text&&!files.length)return setStatus("Paste the article text or add screenshots first.",true);
+  if(url&&!/^https?:\/\//i.test(url))return setStatus("The link should start with https://",true);
+  busy=true;setStatus("Thinking… (usually 20–60 seconds)");const btn=$("#f-go");if(btn){btn.disabled=true;btn.textContent="Summarizing…"}
+  const words=text?text.split(/\s+/).length:0;
+  const input=`${PROMPT}\n\nURL: ${url||"not given"}\n\nARTICLE TEXT:\n${text.slice(0,150000)||"(see attached screenshots)"}`;
+  try{
+    const opts={onText:()=>setStatus("Writing the summary…")};
+    if(files.length)opts.images=files;
+    const r=await sample.json(input,opts);
+    if(!r||typeof r!=="object"||!r.tldr)throw{code:"invalid_json"};
+    const doc={
+      url,foundVia:draft.found.trim(),addedAt:new Date().toISOString(),status:"unread",favorite:false,notes:"",
+      title:String(r.title||host(url)||"Untitled"),author:r.author||null,publisher:r.publisher||host(url)||null,publishedDate:r.publishedDate||null,
+      topic:TOPICS.includes(r.topic)?r.topic:"Other",tags:arr(r.tags).map(String).slice(0,8),entities:arr(r.entities).map(String).slice(0,10),
+      readMinutes:words?Math.max(1,Math.round(words/230)):(Number(r.readMinutes)||null),
+      tldr:String(r.tldr),takeaways:arr(r.takeaways).map(String),outline:arr(r.outline).filter(o=>o&&o.heading),
+      stats:arr(r.stats).filter(s=>s&&s.value),chart:r.chart&&arr(r.chart.data).length?r.chart:null,
+      quotes:arr(r.quotes).map(String),whyItMatters:r.whyItMatters?String(r.whyItMatters):""
+    };
+    const ref=db.collection("articles").doc();
+    await ref.set(doc);
+    if(text)await db.doc("texts/"+ref.id).set({text:text.slice(0,100000)}).catch(()=>{});
+    draft.url=draft.found=draft.text="";draft.files=[];busy=false;statusMsg="";
+    go("article",ref.id);
+  }catch(e){
+    busy=false;
+    const m={not_granted:"Claude access was declined for this page. Reload and allow it to summarize.",rate_limited:"You've hit a Claude usage limit. Try again in a little while.",prompt_too_large:"That article is too long. Paste the main body only.",refused:"Claude couldn't summarize this text. Try pasting just the article body.",invalid_json:"The summary came back garbled. Tap Summarize again.",image_rejected:"One of the screenshots couldn't be read. Try different images.",session_expired:"Sign in to claude.ai again, then retry.",quota_exceeded:"Your library is full. Delete some old summaries."}[e&&e.code];
+    setStatus(m||"Something went wrong. Your text is still here, so tap Summarize again.",true);
+    const btn=$("#f-go");if(btn){btn.disabled=false;btn.textContent="Summarize & save"}
+  }
+}
+render();
+</script>
